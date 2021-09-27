@@ -10,12 +10,7 @@ germain = [
     ["G201 - GERMAIN", "G203 - GERMAIN", "G204 - GERMAIN", "G205 - GERMAIN", "G206 - GERMAIN", "G207 - GERMAIN", "G209 - GERMAIN", "G210 - GERMAIN"]
 ]
 
-# TODO: ajouter les salles Fermat + Descartes 2e étage (Jungle, etc.)
-# TODO: ajouter la possibilité de chercher dans un seul batiment seulement ?
-
-
-# TODO: séparer la partie Discord de la fonctionnalité 
-
+# TODO: Ajouter les salles Fermat + Descartes (Jungle, Alsace, etc.) + possibilité de lancer la recherche sur un seul batiment
 
 def get_room_edt(room, day): 
     """ Requête POST sur CELCAT pour obtenir l'emploi du temps JSON d'une salle pour une jour donné """
@@ -102,13 +97,13 @@ class FreeRoomFinder(commands.Cog):
         if not moment:
             moment = datetime.now()
         else:
-            # TODO: accepter tous les types d'heures (HHhMM, HhMM, HH:MM, DD/MM/YY HH:MM, etc.) - Regex ou lib existante ?  
+            # TODO: accepter tous les formats d'horaires (HHhMM, HhMM, HH:MM, DD/MM/YY HH:MM, etc.) - Regex ou lib existante ?  
             moment = datetime.strptime(moment, "%d/%m/%Y %H:%M")
 
 
         nb_libres, output = find_all_rooms(moment)
 
-        # TODO : Arranger l'Embed de sortie
+        # TODO : Arranger l'output Embed 
 
         if len(output) == 0: # Aucune salle libre en Germain
             em = discord.Embed(title=f"<:week:755154675149439088> ViteMaSalle – {moment}", 
