@@ -1,7 +1,8 @@
-import discord, requests, json, html
-from datetime import date, datetime
-from discord.ext import commands
+import requests, json, html
+from datetime import datetime
 
+greenTick = '<:greenTick:876779478733455360>'
+redTick = ''
 
 germain = [
     ["G001 - GERMAIN", "G002 - GERMAIN", "G003 - GERMAIN", "G007 - GERMAIN"],
@@ -9,8 +10,16 @@ germain = [
     ["G201 - GERMAIN", "G203 - GERMAIN", "G204 - GERMAIN", "G205 - GERMAIN", "G206 - GERMAIN", "G207 - GERMAIN", "G209 - GERMAIN", "G210 - GERMAIN"]
 ]
 
+# TODO: ajouter les salles Fermat + Descartes 2e étage (Jungle, etc.)
+# TODO: ajouter la possibilité de chercher dans un seul batiment seulement ?
+
+
+# TODO: séparer la partie Discord de la fonctionnalité 
+
 
 def get_room_edt(room, day): 
+    """ Requête POST sur CELCAT pour obtenir l'emploi du temps JSON d'une salle pour une jour donné """
+
     url = 'https://edt.uvsq.fr/Home/GetCalendarData'
     data = {'start':day,'end':day,'resType':'102','calView':'agendaDay','federationIds[]':room}
     response = requests.post(url,data=data)
@@ -18,7 +27,10 @@ def get_room_edt(room, day):
     data = json.loads(bytes_value)
     return data
 
-def check_empty(room, moment):
+def check_if_empty(room, moment):
+    """ Renvoie False si la @room est occupé au @moment donné, 
+        et True avec la data du prochain créneau si elle est vacante """
+
     data = get_room_edt(room, moment.strftime("%Y-%m-%d"))
     until = None
     
@@ -34,23 +46,44 @@ def check_empty(room, moment):
         sub_data = {
             "jour":f'{debut.day}/{debut.month}',
             "debut":debut,
-            "fin":fin,
-            "horaire":'{:0>2d}:{:0>2d}  —  {:0>2d}:{:0>2d}'.format(debut.hour, debut.minute, fin.hour, fin.minute),
-            "salle":description.split("¨")[1],
-            "module":description.split("¨")[2],
+            "module":description.split("¨")[2]
         }
         
+        # Salle occupée: on renvoie Faux et on quitte la fonction
         if moment > debut and moment < fin:
             return False, None
 
+        # Sinon: on ajoute la data du dernier module à Until
         elif moment < debut and (until is None or debut < until['debut']):
             until = sub_data
-            
+    
+    # Salle vacante. Until = None si vacante toute la journée (aucun créneau après) 
     return True, until
 
 
-        
+def find_all_rooms(moment):
+    """ Renvoie l'ensemble des salles vacantes pour un @moment donné """
 
+    print(f"Requesting for {moment}") 
+    output = []
+    nb_libres = 0
+    for floor in germain:
+        floor_output = []
+        for room in floor: 
+            empty, until = check_if_empty(room, moment) # until = data du créneau qui occupe la salle 
+            if empty:
+                floor_output.append([room, until])
+                nb_libres += 1
+        
+        output.append(floor_output.copy())
+
+    return nb_libres, output
+
+
+
+# Discord Bot Part 
+import discord
+from discord.ext import commands
 
 class FreeRoomFinder(commands.Cog):
     """
@@ -61,29 +94,23 @@ class FreeRoomFinder(commands.Cog):
         self.bot = bot
 
 
-    @commands.command(name='squat')
+    @commands.command(name='findroom')
     async def find_room(self, ctx, moment = None):
+        
+        # TODO: ajouter slash_commands avec choix pour les batiments ? solution pour le @moment ?
+
         if not moment:
             moment = datetime.now()
         else:
+            # TODO: accepter tous les types d'heures (HHhMM, HhMM, HH:MM, DD/MM/YY HH:MM, etc.) - Regex ou lib existante ?  
             moment = datetime.strptime(moment, "%d/%m/%Y %H:%M")
 
-        print(f"Requesting for {moment}") 
 
-        output = []
-        nb_libres = 0
-        for floor in germain:
-            floor_output = []
-            for room in floor: 
-                empty, until = check_empty(room, moment)
-                if empty:
-                    floor_output.append([room, until])
-                    nb_libres += 1
-            
-            output.append(floor_output.copy())
+        nb_libres, output = find_all_rooms(moment)
 
+        # TODO : Arranger l'Embed de sortie
 
-        if len(output) == 0:
+        if len(output) == 0: # Aucune salle libre en Germain
             em = discord.Embed(title=f"<:week:755154675149439088> ViteMaSalle – {moment}", 
                         description=f"<:redTick:876779478410465291> Aucune salle libre n'est malheuresement disponible en ce moment.", 
                         color=0xb2e4d7, timestamp=datetime.utcnow())
@@ -99,14 +126,20 @@ class FreeRoomFinder(commands.Cog):
                     for room in floor:
                         if room[1]:
                             room[1]['debut'] = "{:0>2d}:{:0>2d}".format(room[1]['debut'].hour, room[1]['debut'].minute)
-                            em_value += f"<:greenTick:876779478733455360> Salle `{room[0][:4]}` — Jusqu'à **{room[1]['debut']}**\n"
+                            em_value += f"{greenTick} Salle `{room[0][:4]}` — Jusqu'à **{room[1]['debut']}**\n"
                         else:
-                            em_value += f"<:greenTick:876779478733455360> Salle `{room[0][:4]}` — **Toute la journée**\n"
+                            em_value += f"{greenTick} Salle `{room[0][:4]}` — **Toute la journée**\n"
                     em.add_field(name=em_name, value=em_value, inline=False)
 
         await ctx.send(embed=em)
 
 
+
+    @find_room.error
+    async def test_on_error(self, ctx, error):
+        """ Sends the suitable error message to user """
+        print(f'\033[91mError: <{ctx.command}> {error}\033[0m')
+        await ctx.send("ERR - `{}`".format(error))
 
 def setup(bot):
     bot.add_cog(FreeRoomFinder(bot))
