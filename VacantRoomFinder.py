@@ -1,5 +1,6 @@
 import requests, json, html
 from datetime import datetime
+import re
 
 greenTick = '<:greenTick:876779478733455360>'
 redTick = ''
@@ -26,7 +27,8 @@ def check_if_empty(room, moment):
     """ Renvoie False si la @room est occupé au @moment donné, 
         et True avec la data du prochain créneau si elle est vacante """
 
-    data = get_room_edt(room, moment.strftime("%Y-%m-%d"))
+    # data = get_room_edt(room, moment.strftime("%Y-%m-%d"))
+    data = get_room_edt(room, f"{moment.year}-{moment.month}-{moment.day}")
     until = None
     
     for module_data in data:
@@ -55,7 +57,6 @@ def check_if_empty(room, moment):
     # Salle vacante. Until = None si vacante toute la journée (aucun créneau après) 
     return True, until
 
-
 def find_all_rooms(moment):
     """ Renvoie l'ensemble des salles vacantes pour un @moment donné """
 
@@ -74,6 +75,43 @@ def find_all_rooms(moment):
 
     return nb_libres, output
 
+def match_datetime(moment):
+    """ Renvoie la date formatée, si celle-ci matche. """
+    try:
+        match = re.compile(r'\d{1,2}-\d{1,2} \d{1,2}:\d{2}').search(moment) # Search is used otherwise, match can't find it if garbage chars surrounding date.
+        if match: return(datetime.strptime(f"{datetime.now().year}_{moment[match.start():match.end()]}", '%Y_%m-%d %H:%M'))
+
+        match = re.compile(r'\d{1,2}-\d{1,2} \d{1,2}h\d{2}').search(moment)
+        if match: return(datetime.strptime(f"{datetime.now().year}_{moment[match.start():match.end()]}", '%Y_%m-%d %Hh%M'))
+
+        match = re.compile(r'\d{1,2}\/\d{1,2} \d{1,2}:\d{2}').search(moment)
+        if match: return(datetime.strptime(f"{datetime.now().year}_{moment[match.start():match.end()]}", '%Y_%m/%d %H:%M'))
+
+        match = re.compile(r'\d{1,2}\/\d{1,2} \d{1,2}h\d{2}').search(moment)
+        if match: return(datetime.strptime(f"{datetime.now().year}_{moment[match.start():match.end()]}", '%Y_%m/%d %Hh%M'))
+
+        match = re.compile(r'\d{4}-\d{1,2}-\d{1,2}').search(moment)
+        if match: return(datetime.strptime(moment[match.start():match.end()], '%Y-%m-%d'))
+
+        match = re.compile(r'\d{2}-\d{1,2}-\d{1,2}').search(moment)
+        if match: return(datetime.strptime(moment[match.start():match.end()], '%Y-%m-%d'))
+
+        match = re.compile(r'\d{4}\/\d{1,2}\/\d{1,2}').search(moment)
+        if match: return(datetime.strptime(moment[match.start():match.end()], '%Y/%m/%d'))
+
+        match = re.compile(r'\d{2}\/\d{1,2}\/\d{1,2}').search(moment)
+        if match: return(datetime.strptime(moment[match.start():match.end()], '%Y/%m/%d'))
+
+        match = re.compile(r'\d{1,2}-\d{1,2}').search(moment)
+        if match: return(datetime.strptime(f"{datetime.now().year}_{moment[match.start():match.end()]}", '%Y_%m-%d'))
+
+        match = re.compile(r'\d{1,2}\/\d{1,2}').search(moment)
+        if match: return(datetime.strptime(f"{datetime.now().year}_{moment[match.start():match.end()]}", '%Y_%m/%d'))
+    except Exception as error:
+        print(f'\033[91mError: <match_datetime({moment})> {error}\033[0m')
+        return False
+    
+    return False
 
 
 # Discord Bot Part 
@@ -97,8 +135,14 @@ class FreeRoomFinder(commands.Cog):
         if not moment:
             moment = datetime.now()
         else:
-            # TODO: accepter tous les formats d'horaires (HHhMM, HhMM, HH:MM, DD/MM/YY HH:MM, etc.) - Regex ou lib existante ?  
-            moment = datetime.strptime(moment, "%d/%m/%Y %H:%M")
+            # TODO: accepter tous les formats d'horaires (HHhMM, HhMM, HH:MM, DD/MM/YY HH:MM, etc.) - Regex ou lib existante ?
+            # moment = datetime.datetime.strptime(moment, '%Y-%m-%d')
+            # moment = datetime.strptime(moment, "%d/%m/%Y %H:%M")
+            res = match_datetime(moment)
+            if not res:
+                await ctx.send(f"Désolé, mais la date {moment} n'a pas été reconnue.\nExemples de formats disponibles : Mois/Jour, Année/Mois/Jour, Année/Mois/Jour, Heure:Minutes")
+            else:
+                moment = res
 
 
         nb_libres, output = find_all_rooms(moment)
