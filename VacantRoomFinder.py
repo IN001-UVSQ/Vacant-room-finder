@@ -34,18 +34,19 @@ def check_if_empty(room, moment):
     for module_data in data:
         debut = datetime.strptime(module_data["start"], "%Y-%m-%dT%H:%M:%S")
         fin = datetime.strptime(module_data["end"], "%Y-%m-%dT%H:%M:%S")
-        
+
         description = html.unescape(module_data["description"])
-        description = description.replace("\n", "")
-        description = description.replace("\r", "")
-        description = description.replace("<br />", "¨")
+        description = description.replace("\n", "").replace("\r", "")
+        description = description.replace("<br />", "¨").split("¨")[2]
+
 
         sub_data = {
             "jour":f'{debut.day}/{debut.month}',
             "debut":debut,
-            "module":description.split("¨")[2]
+            "module":description
         }
-        
+        print(sub_data)
+
         # Salle occupée: on renvoie Faux et on quitte la fonction
         if moment > debut and moment < fin:
             return False, None
@@ -70,7 +71,7 @@ def find_all_rooms(moment):
             if empty:
                 floor_output.append([room, until])
                 nb_libres += 1
-        
+
         output.append(floor_output.copy())
 
     return nb_libres, output
@@ -134,6 +135,8 @@ class FreeRoomFinder(commands.Cog):
 
         if not moment:
             moment = datetime.now()
+            discord_moment = "en ce moment"
+            discord_moment2 = discord_moment
         else:
             # TODO: accepter tous les formats d'horaires (HHhMM, HhMM, HH:MM, DD/MM/YY HH:MM, etc.) - Regex ou lib existante ?
             # moment = datetime.datetime.strptime(moment, '%Y-%m-%d')
@@ -143,6 +146,8 @@ class FreeRoomFinder(commands.Cog):
                 await ctx.send(f"Désolé, mais la date {moment} n'a pas été reconnue.\nExemples de formats disponibles : Mois/Jour, Année/Mois/Jour, Année/Mois/Jour, Heure:Minutes")
             else:
                 moment = res
+                discord_moment = f"<t:{int(moment.timestamp())}:D>"
+                discord_moment2 = "pour " + discord_moment
 
 
         nb_libres, output = find_all_rooms(moment)
@@ -150,14 +155,14 @@ class FreeRoomFinder(commands.Cog):
         # TODO : Arranger l'output Embed 
 
         if len(output) == 0: # Aucune salle libre en Germain
-            em = discord.Embed(title=f"<:week:755154675149439088> ViteMaSalle – {moment}", 
-                        description=f"<:redTick:876779478410465291> Aucune salle libre n'est malheuresement disponible en ce moment.", 
+            em = discord.Embed(title=f"<:week:755154675149439088> ViteMaSalle – {discord_moment}", 
+                        description=f"<:redTick:876779478410465291> Aucune salle libre n'est malheuresement disponible {discord_moment2}.", 
                         color=0xb2e4d7, timestamp=datetime.utcnow())
         else: 
-            em = discord.Embed(title=f"<:week:755154675149439088> ViteMaSalle – {moment}",
-                description=f"**{nb_libres} salles** sont disponibles en ce moment dans le **bâtiment Germain**.", 
+            em = discord.Embed(title=f"<:week:755154675149439088> ViteMaSalle – {discord_moment}",
+                description=f"**{nb_libres} salles** sont disponibles {discord_moment2} dans le **bâtiment Germain**.", 
                 color=0xb2e4d7, timestamp=datetime.utcnow())
-            
+
             for floor, i in zip(output, range(0, len(output))):
                 if len(floor):
                     em_name = f"Étage {i}" if i > 0 else "Rez-de-chaussée"
