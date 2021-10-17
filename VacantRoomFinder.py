@@ -128,8 +128,8 @@ class FreeRoomFinder(commands.Cog):
 
 
     @commands.command(name='findroom')
-    async def find_room(self, ctx, moment = None):
-        
+    async def find_room(self, ctx, *moments):
+        moment = " ".join(moments) # Pour accepter les formats en deux parties (ex 10/04 11h40)
         # TODO: ajouter slash_commands avec choix pour les batiments ? solution pour le @moment ?
 
         if not moment:
