@@ -1,17 +1,27 @@
 import requests, json, html
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 
 greenTick = '<:greenTick:876779478733455360>'
-redTick = ''
+redTick = '<:redTick:876779478410465291>'
 
-germain = [
-    ["G001 - GERMAIN", "G002 - GERMAIN", "G003 - GERMAIN", "G007 - GERMAIN"],
-    ["G101 - GERMAIN", "G103 - GERMAIN", "G104 - GERMAIN", "G105 - GERMAIN", "G107 - GERMAIN"],
-    ["G201 - GERMAIN", "G203 - GERMAIN", "G204 - GERMAIN", "G205 - GERMAIN", "G206 - GERMAIN", "G207 - GERMAIN", "G209 - GERMAIN", "G210 - GERMAIN"]
-]
+batiments = {
+    "Germain": [
+        ["G001 - GERMAIN", "G002 - GERMAIN", "G003 - GERMAIN", "G007 - GERMAIN"],
+        ["G101 - GERMAIN", "G103 - GERMAIN", "G104 - GERMAIN", "G105 - GERMAIN", "G107 - GERMAIN"],
+        ["G201 - GERMAIN", "G203 - GERMAIN", "G204 - GERMAIN", "G205 - GERMAIN", "G206 - GERMAIN", "G207 - GERMAIN", "G209 - GERMAIN", "G210 - GERMAIN"]
+    ],
+    "Fermat": [
+        ["2102 - FERMAT", "2104 - FERMAT", "2105 - FERMAT", "2106 - FERMAT", "2107 - FERMAT"],
+        ["2201 - FERMAT", "2202 - FERMAT", "2203 - FERMAT", "2204 - FERMAT", "2205 - FERMAT", "2206 - FERMAT"]
+    ],
+    "Descartes": [
+         
+    ]
+}
 
-# TODO: Ajouter les salles Fermat + Descartes (Jungle, Alsace, etc.) + possibilité de lancer la recherche sur un seul batiment
+
+# TODO: Ajouter les salles Descartes (Jungle, Alsace, etc.) + possibilité de lancer la recherche sur un seul batiment
 
 def get_room_edt(room, day): 
     """ Requête POST sur CELCAT pour obtenir l'emploi du temps JSON d'une salle pour une jour donné """
@@ -45,7 +55,7 @@ def check_if_empty(room, moment):
             "debut":debut,
             "module":description
         }
-        print(sub_data)
+        # print(sub_data)
 
         # Salle occupée: on renvoie Faux et on quitte la fonction
         if moment > debut and moment < fin:
@@ -58,13 +68,13 @@ def check_if_empty(room, moment):
     # Salle vacante. Until = None si vacante toute la journée (aucun créneau après) 
     return True, until
 
-def find_all_rooms(moment):
+def find_all_rooms(moment, batiment):
     """ Renvoie l'ensemble des salles vacantes pour un @moment donné """
 
     print(f"Requesting for {moment}") 
     output = []
     nb_libres = 0
-    for floor in germain:
+    for floor in batiment:
         floor_output = []
         for room in floor: 
             empty, until = check_if_empty(room, moment) # until = data du créneau qui occupe la salle 
@@ -134,38 +144,59 @@ class FreeRoomFinder(commands.Cog):
         # TODO: ajouter slash_commands avec choix pour les batiments ? solution pour le @moment ?
 
         if not moment:
-            moment = datetime.now()
-            discord_moment = "en ce moment"
-            discord_moment2 = discord_moment
+            moment = datetime.now() + timedelta(hours=2) # VPS UTC
+            discord_moment = "En ce moment"
+            discord_moment2 = "en ce moment"
         else:
             # TODO: accepter tous les formats d'horaires (HHhMM, HhMM, HH:MM, DD/MM/YY HH:MM, etc.) - Regex ou lib existante ?
             # moment = datetime.datetime.strptime(moment, '%Y-%m-%d')
             # moment = datetime.strptime(moment, "%d/%m/%Y %H:%M")
             res = match_datetime(moment)
             if not res:
-                await ctx.send(f"Désolé, mais la date {moment} n'a pas été reconnue.\nExemples de formats disponibles : Mois/Jour, Année/Mois/Jour, Année/Mois/Jour, Heure:Minutes")
+                await ctx.send(f"Désolé, mais la date n'a pas été reconnue.\nExemples de formats disponibles : Mois/Jour, Année/Mois/Jour, Année/Mois/Jour, Heure:Minutes")
             else:
                 moment = res
                 discord_moment = f"<t:{int(moment.timestamp())}:D>"
                 discord_moment2 = "pour " + discord_moment
 
 
-        nb_libres, output = find_all_rooms(moment)
+        nb_libres_g, output_g = find_all_rooms(moment, batiments["Germain"])
+        nb_libres_f, output_f = find_all_rooms(moment, batiments["Fermat"])
+        if len(output_g) == 0 and len(output_f) == 0: # Aucune salle libre nulle part
+            em = discord.Embed(title=f"<:week:755154675149439088> ViteMaSalle — {discord_moment} (Germain & Fermat)", 
+                        description=f"{redTick} Aucune salle libre n'est malheureusement disponible {discord_moment2} dans les **bâtiments Germain et Fermat.**", 
+                        color=0xcd5c5c, timestamp=datetime.utcnow())
+        else:
+            em_desc = ""
+            if len(output_g) == 0:
+                em_desc =  f"{greenTick} **{nb_libres_f} salles** sont disponibles {discord_moment2} dans le **bâtiment Fermat**."
+                em_desc += f"{redTick} Aucune salle libre n'est malheureusement disponible dans le **bâtiment Germain.**\n"
+            elif len(output_f) == 0:
+                em_desc =  f"{greenTick} **{nb_libres_g} salles** sont disponibles {discord_moment2} dans le **bâtiment Germain**."
+                em_desc += f"{redTick} Aucune salle libre n'est malheureusement disponible dans le **bâtiment Fermat.**\n"
+            else:
+                em_desc =  f"{greenTick} **{nb_libres_g} salles** sont disponibles {discord_moment2} dans le **bâtiment Germain**.\n"
+                em_desc += f"{greenTick} **{nb_libres_f} salles** sont disponibles {discord_moment2} dans le **bâtiment Fermat**."
+            
+            em = discord.Embed(title=f"<:week:755154675149439088> ViteMaSalle — {discord_moment} (Germain & Fermat)",
+                    description=em_desc, 
+                    color=0xb2e4d7, timestamp=datetime.utcnow())
 
-        # TODO : Arranger l'output Embed 
-
-        if len(output) == 0: # Aucune salle libre en Germain
-            em = discord.Embed(title=f"<:week:755154675149439088> ViteMaSalle – {discord_moment}", 
-                        description=f"<:redTick:876779478410465291> Aucune salle libre n'est malheuresement disponible {discord_moment2}.", 
-                        color=0xb2e4d7, timestamp=datetime.utcnow())
-        else: 
-            em = discord.Embed(title=f"<:week:755154675149439088> ViteMaSalle – {discord_moment}",
-                description=f"**{nb_libres} salles** sont disponibles {discord_moment2} dans le **bâtiment Germain**.", 
-                color=0xb2e4d7, timestamp=datetime.utcnow())
-
-            for floor, i in zip(output, range(0, len(output))):
+            for i, floor in enumerate(output_g):
                 if len(floor):
-                    em_name = f"Étage {i}" if i > 0 else "Rez-de-chaussée"
+                    em_name = f"🟣 Germain — Étage {i}" if i > 0 else "🟣 Germain — Rez-de-chaussée"
+                    em_value = ""
+                    for room in floor:
+                        if room[1]:
+                            room[1]['debut'] = "{:0>2d}:{:0>2d}".format(room[1]['debut'].hour, room[1]['debut'].minute)
+                            em_value += f"{greenTick} Salle `{room[0][:4]}` — Jusqu'à **{room[1]['debut']}**\n"
+                        else:
+                            em_value += f"{greenTick} Salle `{room[0][:4]}` — **Toute la journée**\n"
+                    em.add_field(name=em_name, value=em_value, inline=False)
+
+            for i, floor in enumerate(output_f):
+                if len(floor):
+                    em_name = f"🟤 Fermat — Étage {i}" if i > 0 else "🟤 Fermat — Rez-de-chaussée"
                     em_value = ""
                     for room in floor:
                         if room[1]:
