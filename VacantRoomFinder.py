@@ -153,12 +153,17 @@ class FreeRoomFinder(commands.Cog):
             # moment = datetime.strptime(moment, "%d/%m/%Y %H:%M")
             res = match_datetime(moment)
             if not res:
-                await ctx.send(f"Désolé, mais la date n'a pas été reconnue.\nExemples de formats disponibles : Mois/Jour, Année/Mois/Jour, Année/Mois/Jour, Heure:Minutes")
+                await ctx.send(f"Désolé, mais la date n'a pas été reconnue.\n**Syntaxe:** `:findroom [mois/jour heure:minutes]`")
+                return
             else:
                 moment = res
                 discord_moment = f"<t:{int(moment.timestamp())}:D>"
                 discord_moment2 = "pour " + discord_moment
 
+        # Check dimanche
+        if moment.date().isoweekday == 7:
+            await ctx.send(f"L'université est fermée le Dimanche, aucune salle ne peut être disponible {discord_moment2}.\n**Syntaxe:** `:findroom [mois/jour heure:minutes]`")
+            return
 
         nb_libres_g, output_g = find_all_rooms(moment, batiments["Germain"])
         nb_libres_f, output_f = find_all_rooms(moment, batiments["Fermat"])
@@ -168,13 +173,13 @@ class FreeRoomFinder(commands.Cog):
                         color=0xcd5c5c, timestamp=datetime.utcnow())
         else:
             em_desc = ""
-            if len(output_g) == 0:
+            if nb_libres_g == 0:
                 em_desc =  f"{greenTick} **{nb_libres_f} salles** sont disponibles {discord_moment2} dans le **bâtiment Fermat**."
                 em_desc += f"{redTick} Aucune salle libre n'est malheureusement disponible dans le **bâtiment Germain.**\n"
-            elif len(output_f) == 0:
+            if nb_libres_f == 0:
                 em_desc =  f"{greenTick} **{nb_libres_g} salles** sont disponibles {discord_moment2} dans le **bâtiment Germain**."
                 em_desc += f"{redTick} Aucune salle libre n'est malheureusement disponible dans le **bâtiment Fermat.**\n"
-            else:
+            if nb_libres_f != 0 and nb_libres_g != 0:
                 em_desc =  f"{greenTick} **{nb_libres_g} salles** sont disponibles {discord_moment2} dans le **bâtiment Germain**.\n"
                 em_desc += f"{greenTick} **{nb_libres_f} salles** sont disponibles {discord_moment2} dans le **bâtiment Fermat**."
             
